@@ -526,7 +526,9 @@ def visit_filter(ast, ctx, macroses=None, config=default_config):
     elif ast.name == 'attr':
         raise InvalidExpression(ast, 'attr filter is not supported')
     else:
-        raise InvalidExpression(ast, 'unknown filter')
+        ctx.meet(Scalar(), ast)
+        node_struct = Scalar.from_ast(ast.node, order_nr=config.ORDER_OBJECT.get_next())
+        return_struct_cls = String
     rv = visit_expr(ast.node, Context(
         ctx=ctx,
         return_struct_cls=return_struct_cls,
