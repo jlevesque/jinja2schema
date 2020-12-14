@@ -53,7 +53,15 @@ def merge(fst, snd, custom_merger=None):
             elif k in snd:
                 result[k] = snd[k].clone()
     elif isinstance(fst, List) and isinstance(snd, List):
-        result = List(merge(fst.item, snd.item, custom_merger=custom_merger))
+        if hasattr(fst.item, 'data') and hasattr(snd.item, 'data'):
+            items = common_items(fst.item.data, snd.item.data)
+            depth_keys = key_at_depth(items.data, 1)
+            if len(depth_keys) == 0:
+                result = List(merge(fst.item, snd.item, custom_merger=custom_merger))
+            else:
+                result = List([fst.item, snd.item])
+        else:
+            result = List(merge(fst.item, snd.item, custom_merger=custom_merger))
     elif isinstance(fst, Tuple) and isinstance(snd, Tuple):
         if fst.items is snd.items is None:
             result = Tuple(None)
@@ -79,6 +87,25 @@ def merge(fst, snd, custom_merger=None):
     return result
 
 
+def key_at_depth(dct, dpt):
+    if dpt > 0:
+        return [key for subdct in dct.values() for key in key_at_depth(subdct.data, dpt - 1)]
+    else:
+        return dct.keys()
+
+
+def common_items(d1: Dictionary, d2: Dictionary):
+    result = Dictionary()
+    for k in d1.keys() & d2.keys():
+        v1 = d1.__getitem__(k)
+        v2 = d2.__getitem__(k)
+        if isinstance(v1, Dictionary) and isinstance(v2, Dictionary):
+            result.__setitem__(k, common_items(v1, v2))
+        elif v1.__eq__(v2):
+            result.__setitem__(k, v1)
+    return result
+
+
 def merge_many(fst, snd, *args):
     struct = merge(fst, snd)
     if args:
@@ -92,6 +119,7 @@ def merge_bool_expr_structs(fst, snd, operator=None):
         result.checked_as_defined = fst.checked_as_defined
         result.checked_as_undefined = fst.checked_as_undefined and snd.checked_as_undefined
         return result
+
     return merge(fst, snd, custom_merger=merger)
 
 
