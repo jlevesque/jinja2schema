@@ -19,7 +19,6 @@ from .._compat import iteritems, izip, zip_longest
 from .expr import Context, visit_expr
 from .util import visit_many
 
-
 stmt_visitors = {}
 
 
@@ -28,13 +27,17 @@ def visits_stmt(node_cls):
 
     :param node_cls: subclass of :class:`jinja2.nodes.Stmt`
     """
+
     def decorator(func):
         stmt_visitors[node_cls] = func
+
         @functools.wraps(func)
         def wrapped_func(ast, macroses=None, config=default_config, child_blocks=None):
             assert isinstance(ast, node_cls)
             return func(ast, macroses, config, child_blocks)
+
         return wrapped_func
+
     return decorator
 
 
@@ -52,6 +55,17 @@ def visit_stmt(ast, macroses=None, config=default_config, child_blocks=None):
     if not visitor:
         raise Exception('stmt visitor for {0} is not found'.format(type(ast)))
     return visitor(ast, macroses, config)
+
+
+def visit_test_node(ast, macroses=None, config=default_config, ):
+    if config.BOOLEAN_CONDITIONS:
+        test_predicted_struct = Boolean.from_ast(ast.test, order_nr=config.ORDER_OBJECT.get_next())
+    else:
+        test_predicted_struct = Unknown.from_ast(ast.test, order_nr=config.ORDER_OBJECT.get_next())
+    test_rtype, test_struct = visit_expr(
+        ast.test, Context(predicted_struct=test_predicted_struct), macroses, config)
+
+    return test_rtype, test_struct
 
 
 @visits_stmt(nodes.For)
@@ -80,19 +94,26 @@ def visit_for(ast, macroses=None, config=default_config, child_blocks=None):
             predicted_struct=List.from_ast(ast, target_struct, order_nr=config.ORDER_OBJECT.get_next())),
         macroses, config)
 
+    iter_test_struct = Dictionary()
+
+    if ast.test:
+        _, test_struct = visit_test_node(ast, macroses, config)
+        test_struct = test_struct.pop(ast.target.name, Unknown.from_ast(ast, order_nr=config.ORDER_OBJECT.get_next()))
+        _, iter_test_struct = visit_expr(
+            ast.iter,
+            Context(
+                return_struct_cls=Unknown,
+                predicted_struct=List.from_ast(ast, test_struct, order_nr=config.ORDER_OBJECT.get_next())),
+            macroses, config)
+
     merge(iter_rtype, List(target_struct))
 
-    return merge_many(iter_struct, body_struct, else_struct)
+    return merge_many(iter_struct, body_struct, else_struct, iter_test_struct)
 
 
 @visits_stmt(nodes.If)
 def visit_if(ast, macroses=None, config=default_config, child_blocks=None):
-    if config.BOOLEAN_CONDITIONS:
-        test_predicted_struct = Boolean.from_ast(ast.test, order_nr=config.ORDER_OBJECT.get_next())
-    else:
-        test_predicted_struct = Unknown.from_ast(ast.test, order_nr=config.ORDER_OBJECT.get_next())
-    test_rtype, test_struct = visit_expr(
-            ast.test, Context(predicted_struct=test_predicted_struct), macroses, config)
+    test_rtype, test_struct = visit_test_node(ast, macroses, config)
     if_struct = visit_many(ast.body, macroses, config, predicted_struct_cls=Scalar)
     else_struct = visit_many(ast.else_, macroses, config, predicted_struct_cls=Scalar) if ast.else_ else Dictionary()
     struct = merge_many(test_struct, if_struct, else_struct)
@@ -107,10 +128,10 @@ def visit_if(ast, macroses=None, config=default_config, child_blocks=None):
                                                var_name in lookup_struct and
                                                lookup_struct[var_name].constant)
             struct[var_name].checked_as_defined = test_struct[var_name].checked_as_defined and (
-                not lookup_struct or not var_name in lookup_struct or lookup_struct[var_name].constant
+                    not lookup_struct or not var_name in lookup_struct or lookup_struct[var_name].constant
             )
             struct[var_name].checked_as_undefined = test_struct[var_name].checked_as_undefined and (
-                not lookup_struct or not var_name in lookup_struct or lookup_struct[var_name].constant
+                    not lookup_struct or not var_name in lookup_struct or lookup_struct[var_name].constant
             )
     return struct
 

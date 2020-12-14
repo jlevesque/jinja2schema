@@ -4,6 +4,7 @@ jinja2schema.model
 ~~~~~~~~~~~~~~~~~~
 """
 import pprint
+from typing import Union
 
 from jinja2 import nodes
 
@@ -98,15 +99,15 @@ class Variable(object):
 
     def __eq__(self, other):
         return (
-            type(self) is type(other) and
-            self.linenos == other.linenos and
-            self.label == other.label and
-            self.constant == other.constant and
-            self.used_with_default == other.used_with_default and
-            self.checked_as_undefined == other.checked_as_undefined and
-            self.checked_as_defined == other.checked_as_defined and
-            self.required == other.required and
-            self.value == other.value
+                type(self) is type(other) and
+                self.linenos == other.linenos and
+                self.label == other.label and
+                self.constant == other.constant and
+                self.used_with_default == other.used_with_default and
+                self.checked_as_undefined == other.checked_as_undefined and
+                self.checked_as_defined == other.checked_as_defined and
+                self.required == other.required and
+                self.value == other.value
         )
 
     def __ne__(self, other):
@@ -200,11 +201,11 @@ class List(Variable):
         return super(List, self).__eq__(other) and self.item == other.item
 
     def __repr__(self):
-        return pprint.pformat([self.item])
+        return pprint.pformat(self.item) if isinstance(self.item, list) else pprint.pformat([self.item])
 
     def clone(self):
         rv = super(List, self).clone()
-        rv.item = self.item.clone()
+        rv.item = self.item if isinstance(self.item, list) else self.item.clone()
         return rv
 
     @classmethod
@@ -247,27 +248,41 @@ class Tuple(Variable):
 
 
 class Scalar(Variable):
+
+    scalar_value: Union[str, int, bool, None]
+    scalar_type: str = '<scalar>'
+
     """A scalar. Either string, number, boolean or ``None``."""
+    def __init__(self, scalar_value=None, **kwargs):
+        self.scalar_value = scalar_value
+        super(Scalar, self).__init__(**kwargs)
+
     def __repr__(self):
-        return '<scalar>'
+        return self.scalar_value if self.scalar_value else self.scalar_type
+
+    def clone(self):
+        rv = super(Scalar, self).clone()
+        rv.scalar_value = self.scalar_value
+        return rv
+
+    @property
+    def python_value(self):
+        return self.scalar_value if self.scalar_value else self.scalar_type
 
 
 class String(Scalar):
     """A string."""
-    def __repr__(self):
-        return '<string>'
+    scalar_type: str = '<string>'
 
 
 class Number(Scalar):
     """A number."""
-    def __repr__(self):
-        return '<number>'
+    scalar_type: str = '<number>'
 
 
 class Boolean(Scalar):
     """A boolean."""
-    def __repr__(self):
-        return '<boolean>'
+    scalar_type: str = '<boolean>'
 
 
 class Unknown(Variable):

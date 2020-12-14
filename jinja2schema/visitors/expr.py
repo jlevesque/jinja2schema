@@ -94,6 +94,7 @@ class Context(object):
 
         (instance of context.return_struct_cls, Dictionary({data: context.predicted_struct}})
     """
+
     def __init__(self, ctx=None, return_struct_cls=None, predicted_struct=None):
         self.predicted_struct = None
         self.return_struct_cls = Unknown
@@ -128,13 +129,17 @@ def visits_expr(node_cls):
 
     :param node_cls: subclass of :class:`jinja2.nodes.Expr`
     """
+
     def decorator(func):
         expr_visitors[node_cls] = func
+
         @functools.wraps(func)
         def wrapped_func(ast, ctx, macroses=None, config=default_config):
             assert isinstance(ast, node_cls)
             return func(ast, ctx, macroses=macroses, config=config)
+
         return wrapped_func
+
     return decorator
 
 
@@ -203,8 +208,22 @@ def visit_compare(ast, ctx, macroses=None, config=default_config):
         op_rtype, op_struct = visit_expr(op.expr, Context(
             predicted_struct=Unknown.from_ast(ast.expr, order_nr=config.ORDER_OBJECT.get_next())), macroses,
                                          config=config)
-        struct = merge(struct, op_struct)
+
+        if isinstance(op_rtype, Scalar):
+            struct = nested_update(struct, op_rtype.__class__(scalar_value=op_struct.data))
+        else:
+            struct = merge(struct, op_struct)
     return Boolean.from_ast(ast, order_nr=config.ORDER_OBJECT.get_next()), struct
+
+
+def nested_update(d, val):
+    for k, v in d.items():
+        if isinstance(v, Dictionary):
+            d[k] = nested_update(v, val)
+        else:
+            d[k] = val
+
+    return d
 
 
 @visits_expr(nodes.Slice)
@@ -335,10 +354,10 @@ def visit_cond_expr(ast, ctx, macroses=None, config=default_config):
                                                var_name in lookup_struct and
                                                lookup_struct[var_name].constant)
             struct[var_name].checked_as_defined = test_struct[var_name].checked_as_defined and (
-                not lookup_struct or not var_name in lookup_struct or lookup_struct[var_name].constant
+                    not lookup_struct or not var_name in lookup_struct or lookup_struct[var_name].constant
             )
             struct[var_name].checked_as_undefined = test_struct[var_name].checked_as_undefined and (
-                not lookup_struct or not var_name in lookup_struct or lookup_struct[var_name].constant
+                    not lookup_struct or not var_name in lookup_struct or lookup_struct[var_name].constant
             )
 
     return rtype, struct
@@ -371,7 +390,7 @@ def visit_call(ast, ctx, macroses=None, config=default_config):
             struct = Dictionary()
             for arg in ast.args:
                 arg_rtype, arg_struct = visit_expr(arg, Context(
-                        predicted_struct=Number.from_ast(arg, order_nr=config.ORDER_OBJECT.get_next())), macroses,
+                    predicted_struct=Number.from_ast(arg, order_nr=config.ORDER_OBJECT.get_next())), macroses,
                                                    config=config)
                 struct = merge(struct, arg_struct)
             return List(Number()), struct
@@ -401,23 +420,23 @@ def visit_call(ast, ctx, macroses=None, config=default_config):
         if ast.node.attr in ('keys', 'iterkeys', 'values', 'itervalues'):
             ctx.meet(List(Unknown()), ast)
             rtype, struct = visit_expr(
-                    ast.node.node, Context(
-                        predicted_struct=Dictionary.from_ast(ast.node.node, order_nr=config.ORDER_OBJECT.get_next())),
-                    macroses, config=config)
+                ast.node.node, Context(
+                    predicted_struct=Dictionary.from_ast(ast.node.node, order_nr=config.ORDER_OBJECT.get_next())),
+                macroses, config=config)
             return List(Unknown()), struct
         if ast.node.attr in ('startswith', 'endswith'):
             ctx.meet(Boolean(), ast)
             rtype, struct = visit_expr(
-                    ast.node.node,
-                    Context(predicted_struct=String.from_ast(ast.node.node, order_nr=config.ORDER_OBJECT.get_next())),
-                    macroses, config=config)
+                ast.node.node,
+                Context(predicted_struct=String.from_ast(ast.node.node, order_nr=config.ORDER_OBJECT.get_next())),
+                macroses, config=config)
             return Boolean(), struct
         if ast.node.attr == 'split':
             ctx.meet(List(String()), ast)
             rtype, struct = visit_expr(
-                    ast.node.node,
-                    Context(predicted_struct=String.from_ast(ast.node.node, order_nr=config.ORDER_OBJECT.get_next())),
-                    macroses, config=config)
+                ast.node.node,
+                Context(predicted_struct=String.from_ast(ast.node.node, order_nr=config.ORDER_OBJECT.get_next())),
+                macroses, config=config)
             if ast.args:
                 arg = ast.args[0]
                 _, arg_struct = visit_expr(arg, Context(
@@ -470,11 +489,11 @@ def visit_filter(ast, ctx, macroses=None, config=default_config):
         return rtype, struct
     elif ast.name == 'default':
         default_value_rtype, default_value_struct = visit_expr(
-                ast.args[0],
-                Context(predicted_struct=Unknown.from_ast(ast.args[0], order_nr=config.ORDER_OBJECT.get_next())),
-                macroses, config=config)
+            ast.args[0],
+            Context(predicted_struct=Unknown.from_ast(ast.args[0], order_nr=config.ORDER_OBJECT.get_next())),
+            macroses, config=config)
         node_struct = merge(
-                ctx.get_predicted_struct(),
+            ctx.get_predicted_struct(),
             default_value_rtype,
         )
         node_struct.used_with_default = True
@@ -555,7 +574,9 @@ def visit_const(ast, ctx, macroses=None, config=default_config):
         rtype = Number.from_ast(ast, constant=True, order_nr=config.ORDER_OBJECT.get_next())
     else:
         rtype = Scalar.from_ast(ast, constant=True, order_nr=config.ORDER_OBJECT.get_next())
-    return rtype, Dictionary()
+
+    value = ast.value
+    return rtype, Dictionary(value)
 
 
 @visits_expr(nodes.Tuple)
