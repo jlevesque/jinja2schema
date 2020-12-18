@@ -54,8 +54,8 @@ def merge(fst, snd, custom_merger=None):
                 result[k] = snd[k].clone()
     elif isinstance(fst, List) and isinstance(snd, List):
         if hasattr(fst.item, 'data') and hasattr(snd.item, 'data'):
-            items = common_items(fst.item.data, snd.item.data)
-            depth_keys = key_at_depth(items.data, 1)
+            items, a = common_items(fst.item.data, snd.item.data)
+            depth_keys = key_at_depth(items.data, a - 1)
             if len(depth_keys) == 0:
                 result = List(merge(fst.item, snd.item, custom_merger=custom_merger))
             else:
@@ -96,14 +96,16 @@ def key_at_depth(dct, dpt):
 
 def common_items(d1: Dictionary, d2: Dictionary):
     result = Dictionary()
+    acc = 0
     for k in d1.keys() & d2.keys():
         v1 = d1.__getitem__(k)
         v2 = d2.__getitem__(k)
         if isinstance(v1, Dictionary) and isinstance(v2, Dictionary):
-            result.__setitem__(k, common_items(v1, v2))
+            value, acc = common_items(v1, v2)
+            result.__setitem__(k, value)
         elif v1.__eq__(v2):
             result.__setitem__(k, v1)
-    return result
+    return result, 1 + acc
 
 
 def merge_many(fst, snd, *args):
